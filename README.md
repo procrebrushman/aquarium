@@ -232,9 +232,11 @@ After a successful implementation, the LLM should give the user a short, practic
 
 1. **Move the tank camera:** explain that hovering near the bottom center reveals the **Tank view** slider, and dragging its knob moves the camera horizontally without rebuilding the aquarium layout.
 2. **Change the fish mix:** explain where the fish-count UI appears, what the `+` and `−` controls do, and that the shared total-fish limit protects performance.
-3. **Feed the fish:** explain the actual feeding control for the current host. The browser preview feeds by clicking the water; the macOS wallpaper uses its menu-bar **Feed** command. For Windows Wallpaper Engine, state clearly whether click-to-feed was verified for that host and never present an unverified control as guaranteed.
-4. **Show cursor interaction:** explain that fish read the pointer position and react or move away from a nearby/fast cursor, while normal desktop input should remain usable.
-5. **Close with limitations and checks:** state which host was tested, which monitor was targeted if relevant, what tests passed, and any interaction that depends on the host delivering pointer events.
+3. **Adjust the lighting:** explain that the lower-right panel exposes **Lighting** sliders for brightness, water fill and warmth, and that the controls update the scene immediately.
+4. **Explain persistence:** state that the tank camera position, fish counts and lighting values are saved for the wallpaper and restored after a Wallpaper Engine restart.
+5. **Feed the fish:** explain the actual feeding control for the current host. The browser preview feeds by clicking the water; the macOS wallpaper uses its menu-bar **Feed** command. For Windows Wallpaper Engine, state clearly whether click-to-feed was verified for that host and never present an unverified control as guaranteed.
+6. **Show cursor interaction:** explain that fish read the pointer position and react or move away from a nearby/fast cursor, while normal desktop input should remain usable.
+7. **Close with limitations and checks:** state which host was tested, which monitor was targeted if relevant, what tests passed, and any interaction that depends on the host delivering pointer events.
 
 A concise final response can use this shape:
 

@@ -27,6 +27,42 @@ const windowsHost =
 const profile = query.get("quality") === "reference" ? "reference" : "balanced";
 if (query.get("still") === "1") paused = true;
 let onBattery = false;
+
+const WALLPAPER_SETTINGS_KEY = "desktop-habitats.riverscape.wallpaper-settings.v1";
+function readWallpaperSettings() {
+  try {
+    const raw = window.localStorage?.getItem(WALLPAPER_SETTINGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+let savedWallpaperSettings = readWallpaperSettings();
+let settingsWriteTimer = null;
+function flushWallpaperSettings() {
+  if (settingsWriteTimer !== null) {
+    clearTimeout(settingsWriteTimer);
+    settingsWriteTimer = null;
+  }
+  try {
+    window.localStorage?.setItem(
+      WALLPAPER_SETTINGS_KEY,
+      JSON.stringify(savedWallpaperSettings),
+    );
+  } catch {
+    // Wallpaper Engine may disable storage in a restricted preview context.
+  }
+}
+function saveWallpaperSettings(patch) {
+  savedWallpaperSettings = { ...savedWallpaperSettings, ...patch };
+  if (settingsWriteTimer !== null) clearTimeout(settingsWriteTimer);
+  settingsWriteTimer = setTimeout(() => {
+    settingsWriteTimer = null;
+    flushWallpaperSettings();
+  }, 120);
+}
+
 function sceneSettings(battery = false) {
   const next = renderSettings({
     profile, wallpaper, pixelRatio: devicePixelRatio, onBattery: battery,
@@ -107,6 +143,9 @@ async function start() {
   camera.position.set(0, 4.65, 20.5);
   let tankPan = 0;
   const TANK_PAN_LIMIT = 6.5;
+  const savedTankPan = Number(savedWallpaperSettings.tankPan);
+  if (Number.isFinite(savedTankPan))
+    tankPan = THREE.MathUtils.clamp(savedTankPan, -1, 1) * TANK_PAN_LIMIT;
   const applyTankPan = () => {
     camera.position.x = tankPan;
     camera.lookAt(tankPan, 4.15, 0);
@@ -117,6 +156,7 @@ async function start() {
     if (!Number.isFinite(value)) return tankPan / TANK_PAN_LIMIT;
     tankPan = THREE.MathUtils.clamp(value, -1, 1) * TANK_PAN_LIMIT;
     applyTankPan();
+    saveWallpaperSettings({ tankPan: tankPan / TANK_PAN_LIMIT });
     loop?.invalidate();
     return tankPan / TANK_PAN_LIMIT;
   };
@@ -162,6 +202,18 @@ async function start() {
   };
   const coolKey = new THREE.Color(0xbad8ff);
   const warmKey = new THREE.Color(0xfff8ee);
+  const savedLighting = savedWallpaperSettings.lighting;
+  if (savedLighting && typeof savedLighting === "object") {
+    for (const name of Object.keys(lightingRanges)) {
+      const value = Number(savedLighting[name]);
+      if (Number.isFinite(value))
+        lighting[name] = THREE.MathUtils.clamp(
+          value,
+          lightingRanges[name][0],
+          lightingRanges[name][1],
+        );
+    }
+  }
   function applyLighting() {
     renderer.toneMappingExposure = 1.17 * lighting.brightness;
     fill.intensity = 0.44 * lighting.waterFill;
@@ -174,6 +226,7 @@ async function start() {
     if (!range || !Number.isFinite(numeric)) return window.habitatGetLighting();
     lighting[name] = THREE.MathUtils.clamp(numeric, range[0], range[1]);
     applyLighting();
+    saveWallpaperSettings({ lighting: { ...lighting } });
     loop?.invalidate();
     return window.habitatGetLighting();
   };
@@ -276,6 +329,32 @@ async function start() {
         );
       return getFishCounts();
     };
+    const saveFishCounts = (counts = getFishCounts()) => {
+      saveWallpaperSettings({ fishCounts: counts.slice(0, fishVariantNames.length) });
+    };
+    const restoreFishCounts = () => {
+      const stored = savedWallpaperSettings.fishCounts;
+      if (!Array.isArray(stored) || stored.length !== fishVariantNames.length) {
+        saveFishCounts();
+        return;
+      }
+      for (let index = 0; index < fishVariantNames.length; index++) {
+        if (index < 3) fish.setVariantCount(index, 0);
+        else {
+          const species = importedFish?.getSpeciesNames()[index - 3];
+          if (species) importedFish.setSpeciesCount(species, 0);
+        }
+      }
+      let remaining = TOTAL_FISH_LIMIT;
+      for (let index = 0; index < fishVariantNames.length; index++) {
+        const desired = Math.max(0, Math.round(Number(stored[index]) || 0));
+        const target = Math.min(desired, remaining);
+        setFishTypeCount(index, target);
+        const actual = getFishCounts()[index] || 0;
+        remaining = Math.max(0, remaining - actual);
+      }
+      saveFishCounts();
+    };
     window.habitatFishTypes = fishVariantNames;
     window.habitatFishTotalLimit = TOTAL_FISH_LIMIT;
     window.habitatGetFishVariants = getFishCounts;
@@ -284,6 +363,7 @@ async function start() {
       const current = getFishCounts()[index] || 0;
       setFishTypeCount(index, current + Math.round(Number(delta) || 0));
       const combined = getFishCounts();
+      saveFishCounts(combined);
       window.dispatchEvent(new CustomEvent("habitat-fish-updated", {
         detail: { counts: combined },
       }));
@@ -291,11 +371,13 @@ async function start() {
     };
     window.habitatSetFishVariant = (type, count) => {
       const combined = setFishTypeCount(type, count);
+      saveFishCounts(combined);
       window.dispatchEvent(new CustomEvent("habitat-fish-updated", {
         detail: { counts: combined },
       }));
       return combined;
     };
+    restoreFishCounts();
     window.dispatchEvent(new CustomEvent("habitat-fish-ready", {
       detail: { names: fishVariantNames, counts: getFishCounts() },
     }));
@@ -539,6 +621,7 @@ async function start() {
     installDiagnostics({ renderer, loop, renderFrame, stats: window.habitatStats });
   }
   window.addEventListener("pagehide", () => {
+    flushWallpaperSettings();
     loop.setHidden(true);
   });
   window.addEventListener("pageshow", visibility);
