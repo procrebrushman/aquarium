@@ -39286,7 +39286,7 @@ ${shader.vertexShader}`;
       // Keep the presentation loop smooth, but bound the expensive internal target.
       // This portrait display does not need a native-size HDR buffer to look crisp
       // behind desktop icons.
-      resolution: battery ? 0.5 : 0.62,
+      resolution: 0.5,
       shadowSize: 512,
       shadowHz: battery ? 4 : 8,
       aoSamples: 2,
