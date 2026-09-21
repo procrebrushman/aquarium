@@ -22,7 +22,7 @@ export const BOUNDS = {
 // Open-water routes include the space above and alongside the planting.
 const OPEN = { minX: -7.5, maxX: 7.5, minY: 1.8, maxY: 7.4, minZ: -1.4, maxZ: 2.8 };
 const GROUND_CLEARANCE = 0.55;
-const MAX_EXPLORERS = 7;
+const MAX_EXPLORERS = 12;
 const UP = new THREE.Vector3(0, 1, 0);
 const FORWARD = new THREE.Vector3(1, 0, 0);
 const TAU = Math.PI * 2;

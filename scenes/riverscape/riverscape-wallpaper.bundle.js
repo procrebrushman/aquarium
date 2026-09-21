@@ -34244,7 +34244,7 @@ ${mossGLSL}`).replace(
   };
   var OPEN = { minX: -7.5, maxX: 7.5, minY: 1.8, maxY: 7.4, minZ: -1.4, maxZ: 2.8 };
   var GROUND_CLEARANCE = 0.55;
-  var MAX_EXPLORERS = 7;
+  var MAX_EXPLORERS = 12;
   var UP2 = new Vector3(0, 1, 0);
   var FORWARD = new Vector3(1, 0, 0);
   var TAU4 = Math.PI * 2;
