@@ -287,11 +287,21 @@ const SWIM_GLSL = /* glsl */ `
   attribute float aFinPhase;
   attribute float aPart;
   attribute float aFinProgress;
+  attribute float aFishType;
   varying vec3 vSkinPoint;
   varying vec2 vFishUV;
   varying float vFishPart;
+  varying float vFishType;
   const float PIVOT = 0.12;
   vec3 gSwimPosition;
+  vec3 fishMorph(vec3 p) {
+    // All Windows variants keep the authored bloodfin anatomy. Variety is carried by
+    // the fin, tail and lateral-line palette rather than by a different body shape.
+    return p;
+  }
+  vec3 fishMorphNormal(vec3 n) {
+    return normalize(n);
+  }
   float spineAngle(float s) {
     float along = clamp(s / 0.57, 0.0, 1.0);
     return aSwim.z * s * (s < 0.0 ? 0.18 : 1.0)
@@ -347,17 +357,19 @@ function applySwimming(material, withColor = true) {
         .replace(
           "#include <beginnormal_vertex>",
           /* glsl */ `
-          vec3 objectNormal = vec3(normal);
-          gSwimPosition = bendSpine(finMotion(position), objectNormal);
+          vec3 fishPosition = fishMorph(position);
+          vec3 objectNormal = fishMorphNormal(normal);
+          gSwimPosition = bendSpine(finMotion(fishPosition), objectNormal);
         `,
         )
         .replace(
           "#include <begin_vertex>",
           /* glsl */ `
           vec3 transformed = gSwimPosition;
-          vSkinPoint = position;
+          vSkinPoint = fishMorph(position);
           vFishUV = uv;
           vFishPart = aPart;
+          vFishType = aFishType;
         `,
         );
       applySkin(shader);
@@ -366,7 +378,7 @@ function applySwimming(material, withColor = true) {
         "#include <begin_vertex>",
         /* glsl */ `
         vec3 swimNormal = vec3(0.0, 1.0, 0.0);
-        vec3 transformed = bendSpine(finMotion(position), swimNormal);
+        vec3 transformed = bendSpine(finMotion(fishMorph(position)), swimNormal);
       `,
       );
     }
@@ -408,18 +420,32 @@ function rotateAboutY(v, angle) {
 
 export function createFishSchool(
   scene,
-  { obstacles = [], landmarks = [], thickets = [], food = null } = {},
+  {
+    obstacles = [],
+    landmarks = [],
+    thickets = [],
+    food = null,
+    count = COUNT,
+    initialVisibleCount = null,
+    sizeMultiplier = 1,
+    variety = false,
+  } = {},
 ) {
+  const fishCount = Number.isFinite(count) ? Math.max(1, Math.round(count)) : COUNT;
+  const fishSize = Number.isFinite(sizeMultiplier) ? Math.max(0.1, sizeMultiplier) : 1;
   const random = randomGenerator(583137);
   const range = (min, max) => min + random() * (max - min);
   const exponential = (mean) => -mean * Math.log(1 - random());
   const geometry = makeAnatomy();
   const swimAttribute = new THREE.InstancedBufferAttribute(
-    new Float32Array(COUNT * 4),
+    new Float32Array(fishCount * 4),
     4,
   );
   const finPhaseAttribute = new THREE.InstancedBufferAttribute(
-    new Float32Array(COUNT), 1,
+    new Float32Array(fishCount), 1,
+  );
+  const fishTypeAttribute = new THREE.InstancedBufferAttribute(
+    new Float32Array(fishCount), 1,
   );
   swimAttribute.setUsage(THREE.DynamicDrawUsage);
   finPhaseAttribute.setUsage(THREE.DynamicDrawUsage);
@@ -427,6 +453,8 @@ export function createFishSchool(
   geometry.fins.setAttribute("aSwim", swimAttribute);
   geometry.body.setAttribute("aFinPhase", finPhaseAttribute);
   geometry.fins.setAttribute("aFinPhase", finPhaseAttribute);
+  geometry.body.setAttribute("aFishType", fishTypeAttribute);
+  geometry.fins.setAttribute("aFishType", fishTypeAttribute);
   const { skin: skinMaterial, fins: finMaterial } = createFishMaterials();
   const depthMaterial = new THREE.MeshDepthMaterial({
     depthPacking: THREE.RGBADepthPacking,
@@ -434,9 +462,9 @@ export function createFishSchool(
   applySwimming(skinMaterial);
   applySwimming(finMaterial);
   applySwimming(depthMaterial, false);
-  const bodies = new THREE.InstancedMesh(geometry.body, skinMaterial, COUNT);
-  const membranes = new THREE.InstancedMesh(geometry.fins, finMaterial, COUNT);
-  bodies.name = "Silver-blue freshwater fish";
+  const bodies = new THREE.InstancedMesh(geometry.body, skinMaterial, fishCount);
+  const membranes = new THREE.InstancedMesh(geometry.fins, finMaterial, fishCount);
+  bodies.name = variety ? "Mixed tropical freshwater fish" : "Silver-blue freshwater fish";
   membranes.name = "Attached translucent fish fins";
   bodies.castShadow = true;
   bodies.receiveShadow = true;
@@ -468,7 +496,7 @@ export function createFishSchool(
   let startled = 0;
   let escapes = 0;
   const initialPositions = [];
-  const fish = Array.from({ length: COUNT }, (_, id) => {
+  const fish = Array.from({ length: fishCount }, (_, id) => {
     const band = id % 6;
     const position = new THREE.Vector3();
     do {
@@ -487,8 +515,13 @@ export function createFishSchool(
       range(-0.045, 0.045),
       range(-0.16, 0.16),
     ).normalize();
+    const type = variety ? (id % 4 === 0 ? 1 : id % 4 === 1 ? 2 : 0) : 0;
+    fishTypeAttribute.setX(id, type);
     return {
       id,
+      type,
+      visual: "procedural",
+      enabled: true,
       position,
       heading,
       swim: heading.clone().multiplyScalar(range(0.02, 0.08)),
@@ -496,7 +529,7 @@ export function createFishSchool(
       anchor: position.clone(),
       goal: position.clone(),
       quaternion: new THREE.Quaternion(),
-      scale: range(0.83, 1.08),
+      scale: range(0.83, 1.08) * fishSize,
       phase: range(0, TAU),
       character: range(0.8, 1.2),
       seed: range(0, 100),
@@ -544,6 +577,12 @@ export function createFishSchool(
       recruitAt: 0,
     };
   });
+  if (Number.isFinite(initialVisibleCount)) {
+    const visible = Math.max(0, Math.min(fishCount, Math.round(initialVisibleCount)));
+    fish.forEach((f, index) => {
+      f.enabled = index < visible;
+    });
+  }
   const delta = new THREE.Vector3();
   const target = new THREE.Vector3();
   const desired = new THREE.Vector3();
@@ -1001,6 +1040,7 @@ export function createFishSchool(
     for (const other of fish) {
       if (
         other === f ||
+        !other.enabled ||
         other.mode === "escape" ||
         other.pendingEscape ||
         elapsed < other.refractoryUntil
@@ -1100,7 +1140,7 @@ export function createFishSchool(
         shelteredVelocity(splash.point, time, wash, thickets);
         splash.speed = wash.length();
         for (const f of fish) {
-          if (f.splashAt || f.mode === "escape" || f.mode === "feed") continue;
+          if (!f.enabled || f.splashAt || f.mode === "escape" || f.mode === "feed") continue;
           const d = f.position.distanceTo(splash.point);
           if (d > FEED.splash) continue;
           f.splashSlot = slot;
@@ -1115,6 +1155,13 @@ export function createFishSchool(
         }
       }
     for (const f of fish) {
+      if (!f.enabled) {
+        scale.setScalar(0);
+        instance.compose(f.position, f.quaternion, scale);
+        bodies.setMatrixAt(f.id, instance);
+        membranes.setMatrixAt(f.id, instance);
+        continue;
+      }
       const { position, swim, heading } = f;
       shelteredVelocity(position, time, water, thickets);
       const bed = thicketAt(thickets, position);
@@ -1146,7 +1193,7 @@ export function createFishSchool(
       let informer = null;
       let informerDistance = Infinity;
       for (const other of fish) {
-        if (other === f) continue;
+        if (other === f || !other.enabled) continue;
         delta.subVectors(other.position, position);
         const distanceSquared = delta.lengthSq();
         if (distanceSquared > SENSES.visual * SENSES.visual) continue;
@@ -1649,10 +1696,19 @@ export function createFishSchool(
       );
       targetQuaternion.multiply(bankQuaternion);
       f.quaternion.copy(targetQuaternion);
-      scale.setScalar(f.scale);
-      instance.compose(position, f.quaternion, scale);
-      bodies.setMatrixAt(f.id, instance);
-      membranes.setMatrixAt(f.id, instance);
+      if (f.visual === "procedural") {
+        scale.setScalar(f.scale);
+        instance.compose(position, f.quaternion, scale);
+        bodies.setMatrixAt(f.id, instance);
+        membranes.setMatrixAt(f.id, instance);
+      } else {
+        // An imported model follows this state. Keep the procedural instance hidden while
+        // still running the full behaviour update above for pointer and food reactions.
+        scale.setScalar(0);
+        instance.compose(position, f.quaternion, scale);
+        bodies.setMatrixAt(f.id, instance);
+        membranes.setMatrixAt(f.id, instance);
+      }
     }
     bodies.instanceMatrix.needsUpdate = true;
     membranes.instanceMatrix.needsUpdate = true;
@@ -1662,9 +1718,42 @@ export function createFishSchool(
 
   for (const f of fish) if (f.id % 4 !== 0) leave(f);
   update(0, 0, null);
+
+  function getVariantCounts() {
+    const counts = [0, 0, 0];
+    for (const f of fish) {
+      if (f.visual === "procedural" && f.enabled && counts[f.type] !== undefined)
+        counts[f.type]++;
+    }
+    return counts;
+  }
+
+  function setVariantCount(type, desired) {
+    const variant = Math.max(0, Math.min(2, Math.round(Number(type))));
+    const members = fish.filter((f) => f.visual === "procedural" && f.type === variant);
+    const count = Math.max(
+      0,
+      Math.min(members.length, Math.round(Number(desired) || 0)),
+    );
+    members.forEach((f, index) => {
+      f.enabled = index < count;
+    });
+    update(0, elapsed, null);
+    return getVariantCounts();
+  }
+
+  function adjustVariantCount(type, delta) {
+    const variant = Math.max(0, Math.min(2, Math.round(Number(type))));
+    const counts = getVariantCounts();
+    return setVariantCount(variant, counts[variant] + Math.round(Number(delta) || 0));
+  }
+
   return {
     update,
     fish,
+    getVariantCounts,
+    setVariantCount,
+    adjustVariantCount,
     getTelemetry() {
       const states = { hover: 0, travel: 0, settle: 0, inspect: 0, feed: 0, escape: 0 };
       let twitching = 0,
@@ -1680,10 +1769,10 @@ export function createFishSchool(
         maximumSpeed = Math.max(maximumSpeed, speed);
       }
       return {
-        count: COUNT,
+        count: fishCount,
         states,
         twitching,
-        averageSpeed: totalSpeed / COUNT,
+        averageSpeed: totalSpeed / fishCount,
         maximumSpeed,
         pointerResponses: startled,
         escapes,

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { createEnvironment, createParticles } from "./environment.js";
 import { createPlants } from "./plants.js";
 import { createFishSchool } from "./fish.js";
+import { createImportedFishSchool } from "./imported-fish.js";
 import { createFood } from "./food.js";
 import { randomGenerator } from "./math.js";
 import { waterTime } from "./water.js";
@@ -21,11 +22,37 @@ let paused =
   matchMedia("(prefers-reduced-motion: reduce)").matches;
 const query = new URLSearchParams(location.search);
 const wallpaper = document.documentElement.dataset.motion === "host";
+const windowsHost =
+  document.documentElement.dataset.windowsHost === "1" || query.get("host") === "windows";
 const profile = query.get("quality") === "reference" ? "reference" : "balanced";
 if (query.get("still") === "1") paused = true;
 let onBattery = false;
-let settings = renderSettings({ profile, wallpaper, pixelRatio: devicePixelRatio });
-let requestedRate = wallpaper ? 0 : 60;
+function sceneSettings(battery = false) {
+  const next = renderSettings({
+    profile, wallpaper, pixelRatio: devicePixelRatio, onBattery: battery,
+  });
+  if (!windowsHost) return next;
+  // A portrait 2160x3840 desktop is a very large render target. Keep the window at
+  // native size for crisp placement, but render the aquarium internally at a smaller
+  // budget and let the compositor upscale it. The original preview/macOS settings stay
+  // unchanged.
+  return {
+    ...next,
+    // Keep the presentation loop smooth, but bound the expensive internal target.
+    // This portrait display does not need a native-size HDR buffer to look crisp
+    // behind desktop icons.
+    resolution: battery ? 0.50 : 0.62,
+    shadowSize: 512,
+    shadowHz: battery ? 4 : 8,
+    aoSamples: 2,
+    samples: 0,
+    powerPreference: "low-power",
+  };
+}
+let settings = sceneSettings(onBattery);
+// Wallpaper Engine can present this page at the monitor cadence. Keep the animation
+// smooth; the render/shadow budgets below are the load controls, not a 20/24fps cap.
+let requestedRate = wallpaper ? (windowsHost ? 60 : 0) : 60;
 let loop = null, applyPower = null;
 window.habitatRate = (fps) => {
   requestedRate = Number.isFinite(fps) && fps > 0 ? Math.min(120, fps) : 0;
@@ -36,7 +63,7 @@ window.habitatPower = (battery) => {
   const next = Boolean(battery);
   if (next === onBattery) return;
   onBattery = next;
-  settings = renderSettings({ profile, wallpaper, pixelRatio: devicePixelRatio, onBattery });
+  settings = sceneSettings(onBattery);
   applyPower?.();
 };
 // A pinch of food, for a host with no pointer to click with. Defined before the scene
@@ -70,13 +97,31 @@ async function start() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#050f0c");
+  // Keep the planting readable against a near-black rear of the tank. The green
+  // remains in the foliage and water haze instead of filling the whole portrait.
+  scene.background = new THREE.Color("#020604");
   // A faint green-blue veil builds along the viewing ray, leaving the foreground clear
   // while the back planting loses a little contrast through the water.
-  scene.fog = new THREE.FogExp2("#16312a", 0.034);
+  scene.fog = new THREE.FogExp2("#08110d", 0.034);
   const camera = new THREE.PerspectiveCamera(25.8, 1420 / 740, 0.2, 65);
   camera.position.set(0, 4.65, 20.5);
-  camera.lookAt(0, 4.15, 0);
+  let tankPan = 0;
+  const TANK_PAN_LIMIT = 6.5;
+  const applyTankPan = () => {
+    camera.position.x = tankPan;
+    camera.lookAt(tankPan, 4.15, 0);
+    camera.updateMatrixWorld();
+  };
+  window.habitatSetTankOffset = (normalized) => {
+    const value = Number(normalized);
+    if (!Number.isFinite(value)) return tankPan / TANK_PAN_LIMIT;
+    tankPan = THREE.MathUtils.clamp(value, -1, 1) * TANK_PAN_LIMIT;
+    applyTankPan();
+    loop?.invalidate();
+    return tankPan / TANK_PAN_LIMIT;
+  };
+  window.habitatGetTankOffset = () => tankPan / TANK_PAN_LIMIT;
+  applyTankPan();
 
   // Overhead lamp with a soft skylight-like fill; the back light passes through the
   // thin leaves and reads as their translucency.
@@ -144,7 +189,7 @@ async function start() {
   // so gaps between blades read as lit water in front of a wall rather than a void.
   const backboard = new THREE.Mesh(
     new THREE.PlaneGeometry(44, 24),
-    new THREE.MeshStandardMaterial({ color: 0x1d3a2c, roughness: 1 }),
+    new THREE.MeshStandardMaterial({ color: 0x07100b, roughness: 1 }),
   );
   backboard.position.set(0, 7, -7.2);
   backboard.receiveShadow = true;
@@ -154,12 +199,81 @@ async function start() {
     ...settings, animatedShadows: profile !== "reference",
   });
   const food = createFood(scene, { thickets: plants.thickets });
+  // The Windows portrait wallpaper has more vertical viewing area than the original
+  // preview. Keep the authored school untouched everywhere else, while using smaller,
+  // more varied fish to make the tall display read as a lively tropical tank.
+  const fishOptions = windowsHost
+    ? { count: 64, initialVisibleCount: 51, sizeMultiplier: 0.5, variety: true }
+    : {};
   const fish = createFishSchool(scene, {
     obstacles,
     landmarks,
     thickets: plants.thickets,
     food,
+    ...fishOptions,
   });
+  const importedFish = windowsHost
+    ? await createImportedFishSchool(scene, fish)
+    : null;
+  if (windowsHost) {
+    // Keep the authored school at 10 per procedural palette while using a lighter
+    // initial mix for the larger imported species. The total budget leaves three
+    // spare slots for the UI without increasing the original wallpaper load.
+    fish.setVariantCount(0, 10);
+    fish.setVariantCount(1, 10);
+    fish.setVariantCount(2, 10);
+    const TOTAL_FISH_LIMIT = 54;
+    const fishVariantNames = [
+      "赤ヒレ",
+      "青緑ヒレ",
+      "紫ヒレ",
+      "グッピー",
+      "ネオンテトラ",
+    ];
+    const getFishCounts = () => [
+      ...fish.getVariantCounts(),
+      ...(importedFish?.getSpeciesCountsArray() || [0, 0]),
+    ];
+    const totalFish = (counts) => counts.reduce((total, count) => total + count, 0);
+    const setFishTypeCount = (type, desired) => {
+      const index = Math.round(Number(type));
+      if (!Number.isInteger(index) || index < 0 || index >= fishVariantNames.length)
+        return getFishCounts();
+      const counts = getFishCounts();
+      const otherFish = totalFish(counts) - (counts[index] || 0);
+      const available = Math.max(0, TOTAL_FISH_LIMIT - otherFish);
+      const target = Math.min(available, Math.max(0, Math.round(Number(desired) || 0)));
+      if (index < 3) fish.setVariantCount(index, target);
+      else
+        importedFish?.setSpeciesCount(
+          importedFish.getSpeciesNames()[index - 3], target,
+        );
+      return getFishCounts();
+    };
+    window.habitatFishTypes = fishVariantNames;
+    window.habitatFishTotalLimit = TOTAL_FISH_LIMIT;
+    window.habitatGetFishVariants = getFishCounts;
+    window.habitatAdjustFishVariant = (type, delta) => {
+      const index = Math.round(Number(type));
+      const current = getFishCounts()[index] || 0;
+      setFishTypeCount(index, current + Math.round(Number(delta) || 0));
+      const combined = getFishCounts();
+      window.dispatchEvent(new CustomEvent("habitat-fish-updated", {
+        detail: { counts: combined },
+      }));
+      return combined;
+    };
+    window.habitatSetFishVariant = (type, count) => {
+      const combined = setFishTypeCount(type, count);
+      window.dispatchEvent(new CustomEvent("habitat-fish-updated", {
+        detail: { counts: combined },
+      }));
+      return combined;
+    };
+    window.dispatchEvent(new CustomEvent("habitat-fish-ready", {
+      detail: { names: fishVariantNames, counts: getFishCounts() },
+    }));
+  }
   const particles = createParticles(scene, { thickets: plants.thickets });
 
   const target = new THREE.WebGLRenderTarget(1, 1, {
@@ -210,7 +324,7 @@ async function start() {
   function resize() {
     const bounds = canvas.getBoundingClientRect();
     // DPR may change when a preview moves between monitors.
-    settings = renderSettings({ profile, wallpaper, pixelRatio: devicePixelRatio, onBattery });
+    settings = sceneSettings(onBattery);
     const dimensions = framebufferSize(bounds.width, bounds.height, settings.resolution, maxDimension);
     zeroSize = !dimensions;
     visibility();
@@ -329,6 +443,7 @@ async function start() {
   // Mesh transforms are static. Fish/food use instance matrices, foliage and particles
   // move in vertex shaders. Avoid recomposing every unchanged object matrix per frame.
   scene.traverse((object) => { object.updateMatrix(); object.matrixAutoUpdate = false; });
+  importedFish?.setDynamic();
   scene.updateMatrixWorld(true);
   let time = 0, lastShadowTime = -Infinity, renderedFrames = 0, shadowFrames = 0;
   let ready = false;
@@ -345,6 +460,7 @@ async function start() {
       waterTime.value = time;
       food.update(step, time);
       fish.update(step, time, pointer);
+      importedFish?.update(step, time);
     }
     if (pointer && now - lastPointerTime > 60)
       pointer.velocity.multiplyScalar(Math.exp(-dt * 12));
@@ -370,6 +486,16 @@ async function start() {
   loop = createFrameLoop(renderFrame, {
     fps: requestedRate, paused, hidden: document.hidden || zeroSize || contextLost,
   });
+  // Windows keeps the scene behind the desktop icons, so the host cannot deliver a
+  // keyboard shortcut to this page. Its small tray menu uses the same controls instead.
+  window.habitatTogglePause = () => {
+    paused = !paused;
+    loop?.setPaused(paused);
+  };
+  window.habitatSetPaused = (value) => {
+    paused = Boolean(value);
+    loop?.setPaused(paused);
+  };
   window.habitatStats = () => ({
     profile, onBattery, resolution: settings.resolution,
     framebuffer: [target.width, target.height], samples: target.samples,
@@ -377,6 +503,8 @@ async function start() {
     shadowHz: Number.isFinite(settings.shadowHz) ? settings.shadowHz : "per-frame",
     renderedFrames, shadowFrames, simulationTime: time,
     drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+    fishVariants: fish.getVariantCounts(),
+    importedFish: importedFish?.getStats() || {},
     plants: { ...plants.stats }, loop: loop.state,
   });
   // Diagnostics are opt-in: no timing queries, synchronization or arrays in normal use.

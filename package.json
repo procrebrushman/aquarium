@@ -6,6 +6,7 @@
   "description": "Living desktop scenes for macOS, starting with Riverscape, a freshwater aquarium.",
   "scripts": {
     "start": "node serve.mjs",
+    "build:windows": "npx --yes esbuild scenes/riverscape/src/main.js --bundle --format=iife --platform=browser --target=es2019 --alias:three=./scenes/riverscape/vendor/three.module.js --outfile=scenes/riverscape/riverscape-wallpaper.bundle.js",
     "wallpaper": "sh wallpaper/install.sh",
     "unwallpaper": "sh wallpaper/uninstall.sh",
     "check": "node --check serve.mjs && for f in scenes/*/src/*.js; do node --check \"$f\" || exit 1; done",

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en" translate="no" data-fit="fill" data-motion="host" data-windows-host="1" data-wallpaper-engine="1">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#080e0c" />
+    <meta name="google" content="notranslate" />
+    <meta name="description" content="Riverscape freshwater aquarium for Wallpaper Engine." />
+    <title>Riverscape • Desktop Habitats wallpaper</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="style.css" />
+    <script>
+      (() => {
+        const fishControlZone = { width: 420, height: 380 };
+        const tankPanZone = { width: 760, height: 240 };
+        let tankPanDragging = false;
+        let tankPanValue = 0;
+
+        function clamp(value, min, max) {
+          return Math.min(max, Math.max(min, value));
+        }
+
+        function inTankPanZone(sample) {
+          const width = Number(sample.width) || 0;
+          const height = Number(sample.height) || 0;
+          const localX = Number(sample.x) - (Number(sample.left) || 0);
+          const localY = Number(sample.y) - (Number(sample.top) || 0);
+          const left = (width - tankPanZone.width) / 2;
+          return localX >= left && localX <= left + tankPanZone.width &&
+            localY >= height - tankPanZone.height;
+        }
+
+        function updateTankPan(sample) {
+          const panel = document.querySelector("#tank-pan-control");
+          const track = document.querySelector("#tank-pan-track");
+          const thumb = document.querySelector("#tank-pan-thumb");
+          const fill = document.querySelector(".tank-pan__fill");
+          const valueOutput = document.querySelector("#tank-pan-value");
+          const canvas = document.querySelector("#scene");
+          if (!panel || !track || !thumb || !canvas || !sample) return;
+          const bounds = canvas.getBoundingClientRect();
+          const width = Number(sample.width) || bounds.width;
+          const height = Number(sample.height) || bounds.height;
+          const left = Number(sample.left) || bounds.left;
+          const top = Number(sample.top) || bounds.top;
+          const localX = Number(sample.x) - left;
+          const localY = Number(sample.y) - top;
+          const hovering = localX >= (width - tankPanZone.width) / 2 &&
+            localX <= (width + tankPanZone.width) / 2 &&
+            localY >= height - tankPanZone.height;
+          const show = hovering || tankPanDragging;
+          panel.hidden = !show;
+          if (!show) return;
+
+          const clientX = bounds.left + (localX / width) * bounds.width;
+          const trackBounds = track.getBoundingClientRect();
+          const ratio = clamp(
+            (clientX - trackBounds.left) / Math.max(1, trackBounds.width),
+            0,
+            1,
+          );
+          if (tankPanDragging) {
+            tankPanValue = ratio * 2 - 1;
+            if (typeof window.habitatSetTankOffset === "function")
+              tankPanValue = window.habitatSetTankOffset(tankPanValue);
+          } else if (typeof window.habitatGetTankOffset === "function") {
+            tankPanValue = clamp(window.habitatGetTankOffset(), -1, 1);
+          }
+          const thumbRatio = (tankPanValue + 1) / 2;
+          thumb.style.left = `${thumbRatio * 100}%`;
+          if (fill) {
+            fill.style.left = `${Math.min(thumbRatio, 0.5) * 100}%`;
+            fill.style.width = `${Math.abs(thumbRatio - 0.5) * 100}%`;
+          }
+          const percent = Math.round(tankPanValue * 100);
+          if (valueOutput) valueOutput.textContent = percent > 0 ? `+${percent}` : `${percent}`;
+          panel.setAttribute("aria-valuenow", `${percent}`);
+        }
+
+        function refreshFishControls() {
+          const getter = window.habitatGetFishVariants;
+          if (typeof getter !== "function") return;
+          const counts = getter();
+          const total = counts.reduce((sum, count) => sum + count, 0);
+          const totalOutput = document.querySelector("#fish-total");
+          if (totalOutput)
+            totalOutput.textContent = `${total} / ${window.habitatFishTotalLimit || total}`;
+          document.querySelectorAll("[data-fish-row]").forEach((row) => {
+            const type = Number(row.dataset.fishRow);
+            const output = row.querySelector("output");
+            if (output && Number.isFinite(counts[type])) output.textContent = counts[type];
+            row.querySelectorAll("button").forEach((button) => {
+              const delta = Number(button.dataset.fishDelta);
+              button.disabled = delta > 0
+                ? total >= (window.habitatFishTotalLimit || Infinity)
+                : counts[type] <= 0;
+            });
+          });
+        }
+
+        function updateFishControls(sample) {
+          const panel = document.querySelector("#fish-controls");
+          const canvas = document.querySelector("#scene");
+          if (!panel || !canvas || !sample) return;
+          const bounds = canvas.getBoundingClientRect();
+          const width = Number(sample.width) || bounds.width;
+          const height = Number(sample.height) || bounds.height;
+          const left = Number(sample.left) || bounds.left;
+          const top = Number(sample.top) || bounds.top;
+          const localX = Number(sample.x) - left;
+          const localY = Number(sample.y) - top;
+          const show = localX >= width - fishControlZone.width &&
+            localY >= height - fishControlZone.height;
+          panel.hidden = !show;
+          if (!show) return;
+
+          const clientX = bounds.left + (localX / width) * bounds.width;
+          const clientY = bounds.top + (localY / height) * bounds.height;
+          let hovered = null;
+          panel.querySelectorAll("button").forEach((button) => {
+            const rect = button.getBoundingClientRect();
+            const isHovered = clientX >= rect.left && clientX <= rect.right &&
+              clientY >= rect.top && clientY <= rect.bottom;
+            button.classList.toggle("is-hover", isHovered);
+            if (isHovered) hovered = button;
+          });
+          if (sample.click && hovered) hovered.click();
+          refreshFishControls();
+        }
+
+        function nativeSample(event, click = false) {
+          const canvas = document.querySelector("#scene");
+          const bounds = canvas?.getBoundingClientRect();
+          if (!bounds) return null;
+          return {
+            x: event.clientX,
+            y: event.clientY,
+            inside: true,
+            click,
+            left: bounds.left,
+            top: bounds.top,
+            width: bounds.width,
+            height: bounds.height,
+          };
+        }
+
+        addEventListener("DOMContentLoaded", () => {
+          const panel = document.querySelector("#fish-controls");
+          const canvas = document.querySelector("#scene");
+          if (!canvas) return;
+          canvas.addEventListener("pointermove", (event) => {
+            const sample = nativeSample(event);
+            if (sample) {
+              updateTankPan(sample);
+              updateFishControls(sample);
+              if (tankPanDragging) event.stopImmediatePropagation();
+            }
+          });
+          canvas.addEventListener("pointerdown", (event) => {
+            if (event.button !== 0) return;
+            const sample = nativeSample(event, true);
+            if (!sample) return;
+            const localX = event.clientX - sample.left;
+            const localY = event.clientY - sample.top;
+            if (inTankPanZone(sample)) {
+              tankPanDragging = true;
+              updateTankPan(sample);
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              return;
+            }
+            if (localX >= sample.width - fishControlZone.width &&
+                localY >= sample.height - fishControlZone.height) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            }
+            updateFishControls(sample);
+          });
+          const endTankPan = () => {
+            if (!tankPanDragging) return;
+            tankPanDragging = false;
+            updateTankPan({
+              x: -Infinity,
+              y: -Infinity,
+              left: 0,
+              top: 0,
+              width: 0,
+              height: 0,
+            });
+          };
+          canvas.addEventListener("pointerup", endTankPan);
+          canvas.addEventListener("pointercancel", endTankPan);
+          addEventListener("pointerup", endTankPan);
+          addEventListener("pointercancel", endTankPan);
+          addEventListener("blur", endTankPan);
+          canvas.addEventListener("pointerleave", () => {
+            if (panel && !tankPanDragging) panel.hidden = true;
+          });
+          panel?.querySelectorAll("button").forEach((button) => {
+            button.addEventListener("click", () => {
+              const type = Number(button.dataset.fishType);
+              const delta = Number(button.dataset.fishDelta);
+              if (typeof window.habitatAdjustFishVariant === "function")
+                window.habitatAdjustFishVariant(type, delta);
+              refreshFishControls();
+            });
+          });
+          addEventListener("habitat-fish-ready", refreshFishControls);
+          addEventListener("habitat-fish-updated", refreshFishControls);
+          refreshFishControls();
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <main id="habitat" aria-label="Interactive freshwater aquarium">
+      <canvas id="scene" tabindex="-1"></canvas>
+      <div id="loading" aria-hidden="true"></div>
+      <div id="tank-pan-control" hidden role="slider" aria-label="Tank view position" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0">
+        <div class="tank-pan__heading">
+          <strong>Tank view</strong>
+          <output id="tank-pan-value">0</output>
+        </div>
+        <div id="tank-pan-track" class="tank-pan__track" aria-hidden="true">
+          <span class="tank-pan__fill"></span>
+          <span id="tank-pan-thumb" class="tank-pan__thumb"></span>
+        </div>
+      </div>
+      <aside id="fish-controls" hidden aria-label="魚の種類と数">
+        <div class="fish-controls__heading">
+          <strong>Fish mix</strong>
+          <span id="fish-total" aria-label="魚の合計数">45 / 54</span>
+        </div>
+        <div class="fish-controls__row" data-fish-row="0"><span>赤ヒレ</span><button type="button" data-fish-type="0" data-fish-delta="-1">−</button><output>10</output><button type="button" data-fish-type="0" data-fish-delta="1">＋</button></div>
+        <div class="fish-controls__row" data-fish-row="1"><span>青緑ヒレ</span><button type="button" data-fish-type="1" data-fish-delta="-1">−</button><output>10</output><button type="button" data-fish-type="1" data-fish-delta="1">＋</button></div>
+        <div class="fish-controls__row" data-fish-row="2"><span>紫ヒレ</span><button type="button" data-fish-type="2" data-fish-delta="-1">−</button><output>10</output><button type="button" data-fish-type="2" data-fish-delta="1">＋</button></div>
+        <div class="fish-controls__row" data-fish-row="3"><span>グッピー</span><button type="button" data-fish-type="3" data-fish-delta="-1">−</button><output>5</output><button type="button" data-fish-type="3" data-fish-delta="1">＋</button></div>
+        <div class="fish-controls__row" data-fish-row="4"><span>ネオンテトラ</span><button type="button" data-fish-type="4" data-fish-delta="-1">−</button><output>10</output><button type="button" data-fish-type="4" data-fish-delta="1">＋</button></div>
+      </aside>
+    </main>
+    <script src="riverscape-wallpaper.bundle.js"></script>
+  </body>
+</html>

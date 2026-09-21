@@ -1,0 +1,18 @@
+{
+  "description": "Riverscape freshwater aquarium from Desktop Habitats.",
+  "file": "wallpaper-engine.html",
+  "general": {
+    "properties": {
+      "schemecolor": {
+        "order": 0,
+        "text": "ui_browse_properties_scheme_color",
+        "type": "color",
+        "value": "0.0078431373 0.0235294118 0.0156862745"
+      }
+    }
+  },
+  "tags": ["Nature", "Relaxing", "Web"],
+  "title": "Riverscape • Desktop Habitats",
+  "type": "web",
+  "visibility": "private"
+}

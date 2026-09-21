@@ -6,7 +6,7 @@ Have you always wanted an aquarium? Now you can have it, right on your desktop :
 
 The fish react to your cursor and compete for food, while the plants sway in a slow current. I plan to add more environments soon. For now, there is only Riverscape, a planted freshwater aquarium.
 
-The scene is rendered live with Three.js and WebGL2. Everything runs locally, with no account or internet connection needed after setup. Desktop wallpaper support is **macOS only** for now; you can also try Riverscape in a browser. The app opens Riverscape directly.
+The scene is rendered live with Three.js and WebGL2. Everything runs locally, with no account or internet connection needed after setup. Desktop wallpaper support is provided by the native macOS app and a local Windows Wallpaper Engine project; you can also try Riverscape in a browser. The app opens Riverscape directly.
 
 ## Install on Mac
 
@@ -28,6 +28,38 @@ During installation, macOS may ask whether Terminal can control System Events. T
 
 You don't need Node.js for the wallpaper. If you already have it, `npm run wallpaper` runs the same installer.
 
+## Install on Windows with Wallpaper Engine
+
+Windows uses the included web-wallpaper project. It does not replace or modify Wallpaper Engine's Workshop data, and it does not require Steam Workshop publishing.
+
+Requirements:
+
+- Windows 10 or newer
+- Wallpaper Engine installed
+- Node.js 20 or newer only if you plan to edit and rebuild the source
+
+Clone this repository, then copy the Riverscape project into Wallpaper Engine's local projects folder. In PowerShell from the repository root:
+
+```powershell
+$wallpaperEngine = Join-Path ${env:ProgramFiles(x86)} 'Steam\steamapps\common\wallpaper_engine'
+$source = Join-Path $PWD 'scenes\riverscape'
+$target = Join-Path $wallpaperEngine 'projects\myprojects\desktop-habitats-riverscape'
+New-Item -ItemType Directory -Force -Path $target | Out-Null
+Copy-Item -Path (Join-Path $source '*') -Destination $target -Recurse -Force
+```
+
+Open Wallpaper Engine, select **Riverscape • Desktop Habitats** from the local projects, and assign it only to the display you want to use. The Windows entry point is `scenes/riverscape/wallpaper-engine.html`. Move the pointer to the bottom center of the portrait display to reveal the tank-view slider and drag it left or right.
+
+To edit the source, rebuild the bundled Windows entry after changing `scenes/riverscape/src/`:
+
+```powershell
+npm run build:windows
+node --check scenes/riverscape/riverscape-wallpaper.bundle.js
+npm test
+```
+
+Copy the updated `scenes/riverscape/` directory to the local Wallpaper Engine project again, then reload the wallpaper. The source project does not edit other monitor assignments.
+
 ## Use the wallpaper
 
 Click the fish icon in the menu bar:
@@ -42,7 +74,7 @@ Move your cursor near the fish to see them react. Desktop icons, clicks and drag
 
 ### Does it work on Windows or Linux?
 
-The desktop app supports macOS only. The browser preview needs a browser with WebGL2, but there is no wallpaper installer for Windows or Linux.
+Windows is supported through the local Wallpaper Engine web project described above. The native desktop app supports macOS. Linux can use the browser preview, but there is no Linux wallpaper installer.
 
 ### Will it drain my battery?
 
@@ -150,6 +182,74 @@ The default rendering profile is `balanced`. Append `?quality=reference&still=1`
 Browser errors appear in the developer console. Wallpaper errors and frame-rate changes go to `/tmp/desktop-habitats.log`. Sending `SIGUSR1` to the Desktop Habitats process saves a snapshot of its first tank to `/tmp/desktop-habitats.png`.
 
 If you change the app's bundle ID, update `com.chaselean.desktop-habitats` in `wallpaper/install.sh`, `wallpaper/uninstall.sh` and `wallpaper/Info.plist` together.
+
+## Work with GPT or Claude
+
+This repository is intentionally structured so an AI coding assistant can extend it without rebuilding the aquarium from scratch. Give the assistant the repository, this README, and the exact change you want. Ask it to inspect the existing implementation before editing.
+
+The main entry points are:
+
+- `scenes/riverscape/src/main.js` — scene setup, camera, rendering, pointer input and wallpaper hooks
+- `scenes/riverscape/src/fish.js` — the original fish movement, schooling, cursor response and feeding behavior
+- `scenes/riverscape/src/imported-fish.js` — optional GLB fish loading, species counts and imported-fish motion
+- `scenes/riverscape/src/environment.js`, `plants.js`, `water.js` — tank layout, plants and water effects
+- `scenes/riverscape/wallpaper-engine.html` and `style.css` — Windows Wallpaper Engine UI and layout
+- `scenes/riverscape/riverscape-wallpaper.bundle.js` — generated Windows bundle; rebuild it after source changes
+- `THIRD_PARTY_ASSETS.md` — required attribution and asset-change record
+
+For a code change, this prompt is a useful starting point:
+
+```text
+You are modifying the Desktop Habitats Riverscape repository.
+
+First read README.md, scenes/riverscape/src/main.js, fish.js, imported-fish.js,
+environment.js, plants.js, water.js, wallpaper-engine.html, style.css, and
+THIRD_PARTY_ASSETS.md. Explain which existing functions and data structures you
+will reuse before editing.
+
+Implement only the requested change. Preserve the existing aquarium layout,
+fish movement, schooling, cursor response, feeding, water, plants, lighting and
+the macOS preview unless the request explicitly changes them. Do not replace the
+scene with a new implementation. Keep Windows-specific behavior in the Windows
+entry point where possible.
+
+If you add a third-party model, texture or animation, use only a downloadable
+free asset with a clear license. Reject paid, trial-only and unclear-license
+assets. Record the author, source URL, license, attribution requirement,
+animation status, files and modifications in THIRD_PARTY_ASSETS.md.
+
+After editing, run node --check on changed JavaScript, rebuild
+scenes/riverscape/riverscape-wallpaper.bundle.js when source code changed, and
+run npm test. Report the files changed, tests run, licensing evidence and any
+runtime limitation. Then follow the "Post-implementation feature walkthrough"
+section below. Do not silently change other monitor settings or push to a
+remote repository without explicit permission.
+```
+
+### Post-implementation feature walkthrough
+
+After a successful implementation, the LLM should give the user a short, practical feature tour instead of ending at “implemented”. Use this order:
+
+1. **Move the tank camera:** explain that hovering near the bottom center reveals the **Tank view** slider, and dragging its knob moves the camera horizontally without rebuilding the aquarium layout.
+2. **Change the fish mix:** explain where the fish-count UI appears, what the `+` and `−` controls do, and that the shared total-fish limit protects performance.
+3. **Feed the fish:** explain the actual feeding control for the current host. The browser preview feeds by clicking the water; the macOS wallpaper uses its menu-bar **Feed** command. For Windows Wallpaper Engine, state clearly whether click-to-feed was verified for that host and never present an unverified control as guaranteed.
+4. **Show cursor interaction:** explain that fish read the pointer position and react or move away from a nearby/fast cursor, while normal desktop input should remain usable.
+5. **Close with limitations and checks:** state which host was tested, which monitor was targeted if relevant, what tests passed, and any interaction that depends on the host delivering pointer events.
+
+A concise final response can use this shape:
+
+```text
+Implemented and tested: [short change summary].
+
+How to use it:
+1. Tank camera — [hover location] → [drag action].
+2. Fish mix — [UI location] → [plus/minus behavior and total limit].
+3. Feeding — [host-specific verified action].
+4. Cursor response — [what the fish do].
+
+Verified on: [host/display]. Tests: [commands/results].
+Limitations: [only if applicable].
+```
 
 ## Credits and license
 

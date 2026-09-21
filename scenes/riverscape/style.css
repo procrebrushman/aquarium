@@ -44,6 +44,158 @@ canvas {
   pointer-events: none;
   transition: opacity 0.8s;
 }
+#tank-pan-control {
+  position: absolute;
+  left: 50%;
+  bottom: 92px;
+  z-index: 4;
+  width: min(560px, calc(100vw - 48px));
+  padding: 13px 18px 16px;
+  border: 1px solid rgba(155, 230, 206, 0.25);
+  border-radius: 14px;
+  background: rgba(5, 18, 15, 0.9);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35), inset 0 0 24px rgba(90, 194, 163, 0.06);
+  color: rgba(232, 255, 247, 0.95);
+  font: 500 15px/1.35 system-ui, sans-serif;
+  pointer-events: none;
+  user-select: none;
+}
+#tank-pan-control[hidden] {
+  display: none;
+}
+.tank-pan__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  letter-spacing: 0.04em;
+}
+.tank-pan__heading strong {
+  color: #baf7df;
+  font-size: 16px;
+}
+#tank-pan-value {
+  color: rgba(205, 255, 235, 0.72);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+.tank-pan__track {
+  position: relative;
+  height: 18px;
+  margin: 0 8px;
+  border-radius: 999px;
+  background: rgba(130, 220, 187, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(155, 230, 206, 0.18);
+}
+.tank-pan__track::before,
+.tank-pan__track::after {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(205, 255, 235, 0.52);
+  content: "";
+  transform: translateY(-50%);
+}
+.tank-pan__track::before {
+  left: 8px;
+}
+.tank-pan__track::after {
+  right: 8px;
+}
+.tank-pan__fill {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 50%;
+  width: 0;
+  border-radius: inherit;
+  background: rgba(130, 220, 187, 0.34);
+}
+.tank-pan__thumb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #d9fff1;
+  border-radius: 50%;
+  background: #4aa98b;
+  box-shadow: 0 0 0 4px rgba(130, 220, 187, 0.12), 0 2px 10px rgba(0, 0, 0, 0.42);
+  transform: translate(-50%, -50%);
+}
+#fish-controls {
+  position: absolute;
+  right: 28px;
+  bottom: 110px;
+  z-index: 5;
+  width: 320px;
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(155, 230, 206, 0.25);
+  border-radius: 14px;
+  background: rgba(5, 18, 15, 0.9);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35), inset 0 0 24px rgba(90, 194, 163, 0.06);
+  color: rgba(232, 255, 247, 0.95);
+  font: 500 16px/1.35 system-ui, sans-serif;
+  pointer-events: none;
+  user-select: none;
+}
+#fish-controls[hidden] {
+  display: none;
+}
+.fish-controls__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  letter-spacing: 0.04em;
+}
+.fish-controls__heading strong {
+  color: #baf7df;
+  font-size: 18px;
+}
+#fish-total {
+  color: rgba(205, 255, 235, 0.72);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+.fish-controls__row {
+  display: grid;
+  grid-template-columns: 1fr 34px 34px 34px;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+}
+.fish-controls__row > span {
+  color: rgba(235, 255, 247, 0.9);
+}
+.fish-controls__row button,
+.fish-controls__row output {
+  display: grid;
+  width: 34px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(155, 230, 206, 0.22);
+  border-radius: 7px;
+  background: rgba(130, 220, 187, 0.08);
+  color: #d9fff1;
+  font: inherit;
+  font-size: 18px;
+}
+.fish-controls__row output {
+  background: rgba(130, 220, 187, 0.16);
+  font-size: 15px;
+}
+.fish-controls__row button.is-hover {
+  border-color: rgba(190, 255, 228, 0.85);
+  background: rgba(130, 220, 187, 0.3);
+  color: #ffffff;
+}
+.fish-controls__row button:disabled {
+  opacity: 0.32;
+}
 @media (prefers-reduced-motion: reduce) {
   #loading {
     transition: none;

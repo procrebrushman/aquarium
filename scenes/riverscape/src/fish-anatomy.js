@@ -834,6 +834,7 @@ export function applySkin(shader) {
       varying vec3 vSkinPoint;
       varying vec2 vFishUV;
       varying float vFishPart;
+      varying float vFishType;
 
       // What the tissue under this fragment passes: set once the anatomy is known, read
       // back by every light below.
@@ -952,7 +953,12 @@ export function applySkin(shader) {
         vec2 sheenGrid = fishScaleGrid();
         float mottle = 1.0 + (fishHash(floor(sheenGrid) + 7.0) - 0.5) * 0.14
           * fishFade(sheenGrid);
-        skin = mix(skin, vec3(0.080, 0.410, 0.620) * mottle, sheen * 0.82);
+        vec3 lineColor = vFishType > 1.5
+          ? vec3(0.08, 0.30, 0.72)
+          : vFishType > 0.5
+            ? vec3(0.04, 0.52, 0.56)
+            : vec3(0.080, 0.410, 0.620);
+        skin = mix(skin, lineColor * mottle, sheen * 0.82);
 
         // Lateral line: one row of pored scales, gently decurved along the flank.
         float lineBand = mix(0.50, 0.43, smoothstep(-0.28, 0.16, fishX));
@@ -1002,6 +1008,25 @@ export function applySkin(shader) {
 
         diffuseColor.rgb = skin;
 
+        // A narrow guanine stripe carries a restrained emissive contribution. It is
+        // intentionally layered on top of the water-lit skin instead of replacing it:
+        // the line catches the tank lighting by day and reads like a neon tetra's glow
+        // in the darker parts of the portrait wallpaper.
+        float neonCore = exp(-pow((fishBand - 0.255) / 0.026, 2.0))
+          * smoothstep(-0.285, -0.225, fishX)
+          * (1.0 - smoothstep(0.175, 0.245, fishX));
+        float neonHalo = exp(-pow((fishBand - 0.255) / 0.082, 2.0)) * neonCore;
+        float neonStrength = vFishType > 1.5 ? 1.30
+          : vFishType > 0.5 ? 0.88
+          : 0.78;
+        vec3 neonColor = vFishType > 1.5
+          ? vec3(0.06, 0.16, 0.72)
+          : vFishType > 0.5
+            ? vec3(0.00, 0.36, 0.48)
+            : vec3(0.008, 0.20, 0.52);
+        totalEmissiveRadiance += neonColor
+          * (neonCore * 1.45 + neonHalo * 0.22) * neonStrength;
+
         // Behind the body cavity the wall is thin swimming muscle, and a small fish's
         // muscle passes light. The path is the width of the section here, so the caudal
         // peduncle and the dorsal and ventral ridges leak most, while the silvered
@@ -1031,7 +1056,13 @@ export function applySkin(shader) {
         float pigment = pow(1.0 - smoothstep(0.34, 1.04, span), 0.8)
           * mix(1.0, 0.42 + 0.58 * lobe, caudal) * mix(1.0, 0.26, pectoral);
         pigment = clamp(pigment, 0.0, 1.0);
-        diffuseColor.rgb = mix(membrane, vec3(0.400, 0.052, 0.020), pigment);
+        vec3 finPigment = vec3(0.400, 0.052, 0.020);
+        if (vFishType > 0.5 && vFishType < 1.5) {
+          finPigment = mix(vec3(0.04, 0.46, 0.48), vec3(0.035, 0.24, 0.45), caudal);
+        } else if (vFishType > 1.5) {
+          finPigment = mix(vec3(0.58, 0.08, 0.25), vec3(0.36, 0.035, 0.18), caudal);
+        }
+        diffuseColor.rgb = mix(membrane, finPigment, pigment);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.400, 0.410, 0.380),
           paleTip * smoothstep(0.76, 0.98, span) * 0.7);
 
@@ -1136,6 +1167,12 @@ export function applySkin(shader) {
         vec3 gradient = sign(determinant) * (dFdx(relief) * rx + dFdy(relief) * ry);
         normal = normalize(abs(determinant) * normal - gradient);
       }
+    `,
+    )
+    .replace(
+      "#include <emissivemap_fragment>",
+      /* glsl */ `
+      #include <emissivemap_fragment>
     `,
     )
     .replace(

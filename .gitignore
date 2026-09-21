@@ -1,3 +1,10 @@
 .DS_Store
 .claude/
 node_modules/
+desktop-habitats-main.zip
+.windows/
+log.txt
+windows/
+scenes/riverscape/windows.html
+scenes/riverscape/assets/fish/user/betta_splendens.glb
+scenes/riverscape/assets/fish/user/mosaic_guppy_male.glb
