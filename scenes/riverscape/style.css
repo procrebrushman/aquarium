@@ -196,6 +196,61 @@ canvas {
 .fish-controls__row button:disabled {
   opacity: 0.32;
 }
+.lighting-controls {
+  margin-top: 13px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(155, 230, 206, 0.16);
+}
+.lighting-controls__heading {
+  color: #baf7df;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+}
+.lighting-controls__row {
+  margin-top: 10px;
+}
+.lighting-controls__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(235, 255, 247, 0.9);
+  font-size: 14px;
+}
+.lighting-controls__label output {
+  color: rgba(205, 255, 235, 0.72);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.lighting-controls__track {
+  position: relative;
+  height: 16px;
+  margin: 5px 7px 0;
+  border-radius: 999px;
+  background: rgba(130, 220, 187, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(155, 230, 206, 0.18);
+}
+.lighting-controls__fill {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 0;
+  border-radius: inherit;
+  background: rgba(130, 220, 187, 0.42);
+}
+.lighting-controls__thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #d9fff1;
+  border-radius: 50%;
+  background: #4aa98b;
+  box-shadow: 0 0 0 3px rgba(130, 220, 187, 0.12), 0 2px 8px rgba(0, 0, 0, 0.42);
+  transform: translate(-50%, -50%);
+}
 @media (prefers-reduced-motion: reduce) {
   #loading {
     transition: none;

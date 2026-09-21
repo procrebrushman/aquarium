@@ -125,7 +125,8 @@ async function start() {
 
   // Overhead lamp with a soft skylight-like fill; the back light passes through the
   // thin leaves and reads as their translucency.
-  scene.add(new THREE.HemisphereLight(0xc3d7bd, 0x353427, 0.3));
+  const hemisphere = new THREE.HemisphereLight(0xc3d7bd, 0x353427, 0.3);
+  scene.add(hemisphere);
   const key = new THREE.DirectionalLight(0xfff8ee, 4.5);
   key.position.set(-3, 11.5, 4.4);
   key.target.position.set(0, 1, 0);
@@ -152,6 +153,31 @@ async function start() {
   const back = new THREE.DirectionalLight(0xdbf9ba, 0.8);
   back.position.set(2, 10, -4);
   scene.add(back);
+
+  const lighting = { brightness: 1, waterFill: 1, warmth: 0.55 };
+  const lightingRanges = {
+    brightness: [0.65, 1.35],
+    waterFill: [0, 1.8],
+    warmth: [0, 1],
+  };
+  const coolKey = new THREE.Color(0xbad8ff);
+  const warmKey = new THREE.Color(0xfff8ee);
+  function applyLighting() {
+    renderer.toneMappingExposure = 1.17 * lighting.brightness;
+    fill.intensity = 0.44 * lighting.waterFill;
+    key.color.copy(coolKey).lerp(warmKey, lighting.warmth);
+  }
+  window.habitatGetLighting = () => ({ ...lighting });
+  window.habitatSetLighting = (name, value) => {
+    const range = lightingRanges[name];
+    const numeric = Number(value);
+    if (!range || !Number.isFinite(numeric)) return window.habitatGetLighting();
+    lighting[name] = THREE.MathUtils.clamp(numeric, range[0], range[1]);
+    applyLighting();
+    loop?.invalidate();
+    return window.habitatGetLighting();
+  };
+  applyLighting();
 
   // A compact HDR environment gives silver scales a broad overhead reflection.
   const envScene = new THREE.Scene();

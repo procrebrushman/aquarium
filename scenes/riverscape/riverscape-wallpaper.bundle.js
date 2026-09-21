@@ -39354,7 +39354,8 @@ ${shader.vertexShader}`;
     };
     window.habitatGetTankOffset = () => tankPan / TANK_PAN_LIMIT;
     applyTankPan();
-    scene.add(new HemisphereLight(12834749, 3486759, 0.3));
+    const hemisphere = new HemisphereLight(12834749, 3486759, 0.3);
+    scene.add(hemisphere);
     const key = new DirectionalLight(16775406, 4.5);
     key.position.set(-3, 11.5, 4.4);
     key.target.position.set(0, 1, 0);
@@ -39378,6 +39379,30 @@ ${shader.vertexShader}`;
     const back = new DirectionalLight(14416314, 0.8);
     back.position.set(2, 10, -4);
     scene.add(back);
+    const lighting = { brightness: 1, waterFill: 1, warmth: 0.55 };
+    const lightingRanges = {
+      brightness: [0.65, 1.35],
+      waterFill: [0, 1.8],
+      warmth: [0, 1]
+    };
+    const coolKey = new Color(12245247);
+    const warmKey = new Color(16775406);
+    function applyLighting() {
+      renderer.toneMappingExposure = 1.17 * lighting.brightness;
+      fill.intensity = 0.44 * lighting.waterFill;
+      key.color.copy(coolKey).lerp(warmKey, lighting.warmth);
+    }
+    window.habitatGetLighting = () => ({ ...lighting });
+    window.habitatSetLighting = (name, value) => {
+      const range3 = lightingRanges[name];
+      const numeric = Number(value);
+      if (!range3 || !Number.isFinite(numeric)) return window.habitatGetLighting();
+      lighting[name] = MathUtils.clamp(numeric, range3[0], range3[1]);
+      applyLighting();
+      loop == null ? void 0 : loop.invalidate();
+      return window.habitatGetLighting();
+    };
+    applyLighting();
     const envScene = new Scene();
     envScene.background = new Color("#253129");
     const strip = new Mesh(

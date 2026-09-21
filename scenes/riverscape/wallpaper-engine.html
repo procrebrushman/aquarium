@@ -11,13 +11,76 @@
     <link rel="stylesheet" href="style.css" />
     <script>
       (() => {
-        const fishControlZone = { width: 420, height: 380 };
+        const fishControlZone = { width: 420, height: 520 };
         const tankPanZone = { width: 760, height: 240 };
         let tankPanDragging = false;
         let tankPanValue = 0;
+        let lightingDraggingKey = null;
+        const lightingSpecs = Object.freeze({
+          brightness: { min: 0.65, max: 1.35 },
+          waterFill: { min: 0, max: 1.8 },
+          warmth: { min: 0, max: 1 },
+        });
 
         function clamp(value, min, max) {
           return Math.min(max, Math.max(min, value));
+        }
+
+        function lightingTrackAt(clientX, clientY) {
+          const panel = document.querySelector("#fish-controls");
+          if (!panel || panel.hidden) return null;
+          for (const track of panel.querySelectorAll("[data-lighting-key]")) {
+            const rect = track.getBoundingClientRect();
+            if (clientX >= rect.left && clientX <= rect.right &&
+                clientY >= rect.top && clientY <= rect.bottom)
+              return track;
+          }
+          return null;
+        }
+
+        function updateLightingControls(sample) {
+          const panel = document.querySelector("#fish-controls");
+          const canvas = document.querySelector("#scene");
+          const getter = window.habitatGetLighting;
+          if (!panel || panel.hidden || !canvas || !sample || typeof getter !== "function") return;
+          const bounds = canvas.getBoundingClientRect();
+          const width = Number(sample.width) || bounds.width;
+          const height = Number(sample.height) || bounds.height;
+          const left = Number(sample.left) || bounds.left;
+          const top = Number(sample.top) || bounds.top;
+          const localX = Number(sample.x) - left;
+          const localY = Number(sample.y) - top;
+          const clientX = bounds.left + (localX / width) * bounds.width;
+          const clientY = bounds.top + (localY / height) * bounds.height;
+          if (lightingDraggingKey) {
+            const track = panel.querySelector(
+              `[data-lighting-key="${lightingDraggingKey}"]`,
+            );
+            const spec = lightingSpecs[lightingDraggingKey];
+            if (track && spec) {
+              const rect = track.getBoundingClientRect();
+              const ratio = clamp((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+              const value = spec.min + (spec.max - spec.min) * ratio;
+              if (typeof window.habitatSetLighting === "function")
+                window.habitatSetLighting(lightingDraggingKey, value);
+            }
+          }
+          const values = getter();
+          panel.querySelectorAll("[data-lighting-row]").forEach((row) => {
+            const key = row.dataset.lightingRow;
+            const spec = lightingSpecs[key];
+            const value = Number(values[key]);
+            const track = row.querySelector("[data-lighting-key]");
+            const thumb = row.querySelector(".lighting-controls__thumb");
+            const fill = row.querySelector(".lighting-controls__fill");
+            const output = row.querySelector("output");
+            if (!spec || !Number.isFinite(value) || !track) return;
+            const ratio = clamp((value - spec.min) / (spec.max - spec.min), 0, 1);
+            if (thumb) thumb.style.left = `${ratio * 100}%`;
+            if (fill) fill.style.width = `${ratio * 100}%`;
+            if (output)
+              output.textContent = `${Math.round(value * 100)}%`;
+          });
         }
 
         function inTankPanZone(sample) {
@@ -109,8 +172,8 @@
           const top = Number(sample.top) || bounds.top;
           const localX = Number(sample.x) - left;
           const localY = Number(sample.y) - top;
-          const show = localX >= width - fishControlZone.width &&
-            localY >= height - fishControlZone.height;
+          const show = (localX >= width - fishControlZone.width &&
+            localY >= height - fishControlZone.height) || Boolean(lightingDraggingKey);
           panel.hidden = !show;
           if (!show) return;
 
@@ -126,6 +189,7 @@
           });
           if (sample.click && hovered) hovered.click();
           refreshFishControls();
+          updateLightingControls(sample);
         }
 
         function nativeSample(event, click = false) {
@@ -153,6 +217,7 @@
             if (sample) {
               updateTankPan(sample);
               updateFishControls(sample);
+              if (lightingDraggingKey) event.stopImmediatePropagation();
               if (tankPanDragging) event.stopImmediatePropagation();
             }
           });
@@ -169,6 +234,15 @@
               event.stopImmediatePropagation();
               return;
             }
+            const lightingTrack = lightingTrackAt(event.clientX, event.clientY);
+            if (lightingTrack) {
+              lightingDraggingKey = lightingTrack.dataset.lightingKey;
+              updateFishControls(sample);
+              updateLightingControls(sample);
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              return;
+            }
             if (localX >= sample.width - fishControlZone.width &&
                 localY >= sample.height - fishControlZone.height) {
               event.preventDefault();
@@ -177,16 +251,18 @@
             updateFishControls(sample);
           });
           const endTankPan = () => {
-            if (!tankPanDragging) return;
-            tankPanDragging = false;
-            updateTankPan({
-              x: -Infinity,
-              y: -Infinity,
-              left: 0,
-              top: 0,
-              width: 0,
-              height: 0,
-            });
+            if (tankPanDragging) {
+              tankPanDragging = false;
+              updateTankPan({
+                x: -Infinity,
+                y: -Infinity,
+                left: 0,
+                top: 0,
+                width: 0,
+                height: 0,
+              });
+            }
+            lightingDraggingKey = null;
           };
           canvas.addEventListener("pointerup", endTankPan);
           canvas.addEventListener("pointercancel", endTankPan);
@@ -236,6 +312,21 @@
         <div class="fish-controls__row" data-fish-row="2"><span>紫ヒレ</span><button type="button" data-fish-type="2" data-fish-delta="-1">−</button><output>10</output><button type="button" data-fish-type="2" data-fish-delta="1">＋</button></div>
         <div class="fish-controls__row" data-fish-row="3"><span>グッピー</span><button type="button" data-fish-type="3" data-fish-delta="-1">−</button><output>5</output><button type="button" data-fish-type="3" data-fish-delta="1">＋</button></div>
         <div class="fish-controls__row" data-fish-row="4"><span>ネオンテトラ</span><button type="button" data-fish-type="4" data-fish-delta="-1">−</button><output>10</output><button type="button" data-fish-type="4" data-fish-delta="1">＋</button></div>
+        <section class="lighting-controls" aria-label="Lighting">
+          <div class="lighting-controls__heading"><strong>Lighting</strong></div>
+          <div class="lighting-controls__row" data-lighting-row="brightness">
+            <div class="lighting-controls__label"><span>Brightness</span><output>100%</output></div>
+            <div class="lighting-controls__track" data-lighting-key="brightness" aria-hidden="true"><span class="lighting-controls__fill"></span><span class="lighting-controls__thumb"></span></div>
+          </div>
+          <div class="lighting-controls__row" data-lighting-row="waterFill">
+            <div class="lighting-controls__label"><span>Water light</span><output>100%</output></div>
+            <div class="lighting-controls__track" data-lighting-key="waterFill" aria-hidden="true"><span class="lighting-controls__fill"></span><span class="lighting-controls__thumb"></span></div>
+          </div>
+          <div class="lighting-controls__row" data-lighting-row="warmth">
+            <div class="lighting-controls__label"><span>Warmth</span><output>55%</output></div>
+            <div class="lighting-controls__track" data-lighting-key="warmth" aria-hidden="true"><span class="lighting-controls__fill"></span><span class="lighting-controls__thumb"></span></div>
+          </div>
+        </section>
       </aside>
     </main>
     <script src="riverscape-wallpaper.bundle.js"></script>
