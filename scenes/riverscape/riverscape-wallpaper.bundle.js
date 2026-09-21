@@ -39135,7 +39135,8 @@ ${shader.vertexShader}`;
     function schedule() {
       if (disposed || hidden || !dirty && !running() || raf !== null || timer !== null) return;
       const wait = dirty ? 0 : deadline - clock() - 3;
-      if (wait > 4) {
+      const directVsync = fps >= 50;
+      if (wait > 4 && !directVsync) {
         timer = delay(() => {
           timer = null;
           raf = requestFrame(frame);

@@ -24,7 +24,13 @@ export function createFrameLoop(draw, {
   function schedule() {
     if (disposed || hidden || (!dirty && !running()) || raf !== null || timer !== null) return;
     const wait = dirty ? 0 : deadline - clock() - 3;
-    if (wait > 4) {
+    // At display-rate animation, queue the next frame directly. A setTimeout before
+    // requestAnimationFrame can miss a Windows compositor tick when the timer fires
+    // a millisecond late, which turns an otherwise steady 60 Hz motion into alternating
+    // 60/30 Hz presentation. Timers are still useful below display rate, where they
+    // avoid waking the page just to discard frames.
+    const directVsync = fps >= 50;
+    if (wait > 4 && !directVsync) {
       timer = delay(() => { timer = null; raf = requestFrame(frame); }, wait);
     } else raf = requestFrame(frame);
   }
